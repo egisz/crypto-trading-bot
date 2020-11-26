@@ -239,6 +239,10 @@ Temporary Items
 /.idea
 /conf.json
 /instance.js
+/instance.js.2*
 /bot.db
 /bot.db-shm
 /bot.db-wal
+
+package-lock.json
+
