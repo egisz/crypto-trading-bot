@@ -5,9 +5,37 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Attach by Process ID",
+            "processId": "${command:PickProcess}",
+            "request": "attach",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "pwa-node"
+        },
+        
+
+        {
+            "name": "Server",
             "type": "node",
             "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/index.js",
+            "args": ["trade"]
+        },
+        {
+            "name": "Client",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8080/",
+            "webRoot": "${workspaceRoot}/web/static/js"
+        },
+        {
             "name": "Mocha Tests",
+            "type": "node",
+            "request": "launch",
             "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
             "args": [
                 //"-u",
@@ -22,17 +50,12 @@
             "skipFiles": [
                 "<node_internals>/**"
             ]
-        },
-
+        }        
+    ],
+    "compounds": [
         {
-            "type": "node",
-            "request": "launch",
-            "name": "Bot-DEV",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/index.js",
-            "args": ["trade"]
+            "name": "Server/Client",
+            "configurations": ["Server", "Client"]
         }
-    ]
+    ]    
 }
