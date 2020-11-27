@@ -1,4 +1,12 @@
 module.exports = class Position {
+  static get SIDE_LONG() {
+    return 'long';
+  }
+
+  static get SIDE_SHORT() {
+    return 'short';
+  }
+
   /**
    * @param symbol 'BTCUSD'
    * @param side "long" or "short"
@@ -10,7 +18,7 @@ module.exports = class Position {
    * @param raw
    */
   constructor(symbol, side, amount, profit, updatedAt, entry, createdAt, raw = undefined) {
-    if (!['long', 'short'].includes(side)) {
+    if (![Position.SIDE_LONG, Position.SIDE_SHORT].includes(side)) {
       throw new Error(`Invalid position direction given:${side}`);
     }
 
@@ -33,11 +41,11 @@ module.exports = class Position {
   }
 
   isShort() {
-    return this.side === 'short';
+    return this.getSide() === Position.SIDE_SHORT;
   }
 
   isLong() {
-    return this.side === 'long';
+    return this.getSide() === Position.SIDE_LONG;
   }
 
   getAmount() {
@@ -54,6 +62,10 @@ module.exports = class Position {
 
   getEntry() {
     return this.entry;
+  }
+
+  getSide() {
+    return this.side;
   }
 
   getCreatedAt() {
