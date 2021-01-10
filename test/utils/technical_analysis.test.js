@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const ta = require('../../src/utils/technical_analysis');
+const IndicatorBuilder = require('../../src/modules/strategy/dict/indicator_builder');
 
 describe('#technical_analysis for candles', () => {
   const createCandleFixtures = function() {
@@ -10,17 +11,17 @@ describe('#technical_analysis for candles', () => {
   it('technical_analysis for candles are returned', async () => {
     const result = await ta.getPredefinedIndicators(createCandleFixtures().reverse());
 
-    assert.equal(result.ema_55.length, 490);
-    assert.equal(result.sma_200.length, 291);
+    assert.strictEqual(result.ema_55.length, 490);
+    assert.strictEqual(result.sma_200.length, 291);
 
-    assert.equal(8145, Math.round(result.ema_55[0]));
-    assert.equal(7994, Math.round(result.sma_200[0]));
+    assert.strictEqual(8145, Math.round(result.ema_55[0]));
+    assert.strictEqual(7994, Math.round(result.sma_200[0]));
   });
 
   it('technical_analysis for options are created', async () => {
-    const lookbacks = createCandleFixtures().reverse();
+    const lookback = createCandleFixtures().reverse();
 
-    const result = await ta.createIndicatorsLookback(lookbacks, [
+    const result = await ta.createIndicatorsLookback(lookback, [
       {
         indicator: 'ema',
         key: 'ema_55',
@@ -186,135 +187,178 @@ describe('#technical_analysis for candles', () => {
       }
     ]);
 
-    assert.equal(result.ema_55.length, 490);
-    assert.equal(result.sma_200.length, 291);
+    assert.strictEqual(result.ema_55.length, 490);
+    assert.strictEqual(result.sma_200.length, 291);
 
-    assert.equal(result.wma.length > 0, true);
-    assert.equal(result.dema.length > 0, true);
-    assert.equal(result.tema.length > 0, true);
-    assert.equal(result.trima.length > 0, true);
-    assert.equal(result.kama.length > 0, true);
+    assert.strictEqual(result.wma.length > 0, true);
+    assert.strictEqual(result.dema.length > 0, true);
+    assert.strictEqual(result.tema.length > 0, true);
+    assert.strictEqual(result.trima.length > 0, true);
+    assert.strictEqual(result.kama.length > 0, true);
 
-    assert.equal(result.rsi.length > 0, true);
-    assert.equal(result.mfi.length > 0, true);
+    assert.strictEqual(result.rsi.length > 0, true);
+    assert.strictEqual(result.mfi.length > 0, true);
 
-    assert.equal(typeof result.rsi[0], 'number');
-    assert.equal(typeof result.mfi[0], 'number');
+    assert.strictEqual(typeof result.rsi[0], 'number');
+    assert.strictEqual(typeof result.mfi[0], 'number');
 
-    assert.equal(8145, Math.round(result.ema_55[0]));
-    assert.equal(7994, Math.round(result.sma_200[0]));
-    assert.equal(0.31, parseFloat(result.macd[1].histogram).toFixed(2));
+    assert.strictEqual(8145, Math.round(result.ema_55[0]));
+    assert.strictEqual(7994, Math.round(result.sma_200[0]));
+    assert.strictEqual(0.31, parseFloat(result.macd[1].histogram.toFixed(2)));
 
-    assert.equal(-12689695, parseFloat(result.obv[1]));
-    assert.equal(-10.657352941176214, parseFloat(result.ao[1]));
+    assert.strictEqual(-12689695, parseFloat(result.obv[1]));
+    assert.strictEqual(-10.657352941176214, parseFloat(result.ao[1]));
 
     // test macd implementations
-    assert.equal(-3.89, parseFloat(result.macd[result.macd.length - 1].histogram).toFixed(2));
-    assert.equal(-4.07, parseFloat(result.macd_ext[result.macd_ext.length - 1].histogram).toFixed(2));
+    assert.strictEqual(-3.89, parseFloat(result.macd[result.macd.length - 1].histogram.toFixed(2)));
+    assert.strictEqual(-4.07, parseFloat(result.macd_ext[result.macd_ext.length - 1].histogram.toFixed(2)));
 
-    assert.equal(2.5, parseFloat(result.macd_ext_dema[result.macd_ext_dema.length - 1].histogram).toFixed(2));
-    assert.equal(
+    assert.strictEqual(2.5, parseFloat(result.macd_ext_dema[result.macd_ext_dema.length - 1].histogram.toFixed(2)));
+    assert.strictEqual(
       1.12,
-      parseFloat(result.macd_ext_dema_slow[result.macd_ext_dema_slow.length - 1].histogram).toFixed(2)
+      parseFloat(result.macd_ext_dema_slow[result.macd_ext_dema_slow.length - 1].histogram.toFixed(2))
     );
 
-    assert.equal(result.bb.length > 0, true);
-    assert.equal(result.bb[0].lower < result.bb[0].middle, true);
-    assert.equal(result.bb[0].middle < result.bb[0].upper, true);
-    assert.equal(result.bb[0].lower < result.bb[0].upper, true);
-    assert.equal(result.bb[0].width > 0, true);
+    assert.strictEqual(result.bb.length > 0, true);
+    assert.strictEqual(result.bb[0].lower < result.bb[0].middle, true);
+    assert.strictEqual(result.bb[0].middle < result.bb[0].upper, true);
+    assert.strictEqual(result.bb[0].lower < result.bb[0].upper, true);
+    assert.strictEqual(result.bb[0].width > 0, true);
 
-    assert.equal(result.bb_talib.length > 0, true);
-    assert.equal(result.bb_talib[0].lower < result.bb[0].middle, true);
-    assert.equal(result.bb_talib[0].middle < result.bb[0].upper, true);
-    assert.equal(result.bb_talib[0].lower < result.bb[0].upper, true);
-    assert.equal(result.bb_talib[0].width > 0, true);
+    assert.strictEqual(result.bb_talib.length > 0, true);
+    assert.strictEqual(result.bb_talib[0].lower < result.bb[0].middle, true);
+    assert.strictEqual(result.bb_talib[0].middle < result.bb[0].upper, true);
+    assert.strictEqual(result.bb_talib[0].lower < result.bb[0].upper, true);
+    assert.strictEqual(result.bb_talib[0].width > 0, true);
 
-    assert.equal(result.stoch[0].stoch_k > 0, true);
-    assert.equal(result.stoch[0].stoch_d > 0, true);
+    assert.strictEqual(result.stoch[0].stoch_k > 0, true);
+    assert.strictEqual(result.stoch[0].stoch_d > 0, true);
 
-    assert.equal(result.stoch_rsi[5].stoch_k > 0, true);
-    assert.equal(result.stoch_rsi[5].stoch_d > 0, true);
+    assert.strictEqual(result.stoch_rsi[5].stoch_k > 0, true);
+    assert.strictEqual(result.stoch_rsi[5].stoch_d > 0, true);
 
-    assert.equal(result.pivot_points_high_low.filter(v => 'high' in v && 'close' in v.high).length > 2, true);
-    assert.equal(result.pivot_points_high_low.filter(v => 'low' in v && 'close' in v.low).length > 2, true);
+    assert.strictEqual(result.pivot_points_high_low.filter(v => 'high' in v && 'close' in v.high).length > 2, true);
+    assert.strictEqual(result.pivot_points_high_low.filter(v => 'low' in v && 'close' in v.low).length > 2, true);
 
-    assert.equal(
+    assert.strictEqual(
       result.pivot_points_high_low.filter(v => 'high' in v && 'close' in v.high).length >
         result.pivot_points_high_low_2.filter(v => 'high' in v && 'close' in v.high).length,
       true
     );
 
-    assert.equal(result.candles.length, lookbacks.length);
-    assert.equal(result.candles[0].time, lookbacks[0].time);
-    assert.equal(result.candles[0].time < lookbacks[1].time, true);
-    assert.equal(result.candles[result.candles.length - 1].time, lookbacks[result.candles.length - 1].time);
+    assert.strictEqual(result.candles.length, lookback.length);
+    assert.strictEqual(result.candles[0].time, lookback[0].time);
+    assert.strictEqual(result.candles[0].time < lookback[1].time, true);
+    assert.strictEqual(result.candles[result.candles.length - 1].time, lookback[result.candles.length - 1].time);
 
-    assert.equal(result.heikin_ashi.length, lookbacks.length);
-    assert.equal(result.heikin_ashi[0].time, lookbacks[0].time);
-    assert.equal(result.heikin_ashi[0].time < lookbacks[1].time, true);
-    assert.equal(result.heikin_ashi[result.heikin_ashi.length - 1].time, lookbacks[result.heikin_ashi.length - 1].time);
+    assert.strictEqual(result.heikin_ashi.length, lookback.length);
+    assert.strictEqual(result.heikin_ashi[0].time, lookback[0].time);
+    assert.strictEqual(result.heikin_ashi[0].time < lookback[1].time, true);
+    assert.strictEqual(
+      result.heikin_ashi[result.heikin_ashi.length - 1].time,
+      lookback[result.heikin_ashi.length - 1].time
+    );
 
-    assert.equal(result.hma.length > 0, true);
-    assert.equal(result.hma[0] > 0, true);
+    assert.strictEqual(result.hma.length > 0, true);
+    assert.strictEqual(result.hma[0] > 0, true);
 
-    assert.equal(result.vwma.length > 0, true);
-    assert.equal(result.vwma[0] > 0, true);
+    assert.strictEqual(result.vwma.length > 0, true);
+    assert.strictEqual(result.vwma[0] > 0, true);
 
-    assert.equal(result.atr[0] > 0, true);
-    assert.equal(result.roc[0] < 0, true);
+    assert.strictEqual(result.atr[0] > 0, true);
+    assert.strictEqual(result.roc[0] < 0, true);
 
-    assert.equal(result.adx[0] > 0, true);
+    assert.strictEqual(result.adx[0] > 0, true);
 
-    assert.equal(result.psar[0], 8144.5);
+    assert.strictEqual(result.psar[0], 8144.5);
 
     const volumeByPrice = result.volume_by_price[0][0];
 
-    assert.equal(volumeByPrice.low > 0, true);
-    assert.equal(volumeByPrice.high > 0, true);
-    assert.equal(volumeByPrice.volume > 0, true);
-    assert.equal(result.volume_by_price[0].length, 12);
+    assert.strictEqual(volumeByPrice.low > 0, true);
+    assert.strictEqual(volumeByPrice.high > 0, true);
+    assert.strictEqual(volumeByPrice.volume > 0, true);
+    assert.strictEqual(result.volume_by_price[0].length, 12);
 
-    assert.equal(result.zigzag.filter(v => v.turningPoint === true).length > 0, true);
+    assert.strictEqual(result.zigzag.filter(v => v.turningPoint === true).length > 0, true);
 
-    assert.equal(result.volume_profile.length, 14);
+    assert.strictEqual(result.volume_profile.length, 14);
 
     const ichimokuCloud = Object.keys(result.ichimoku_cloud[0]);
-    assert.equal(ichimokuCloud.includes('base'), true);
-    assert.equal(ichimokuCloud.includes('conversion'), true);
-    assert.equal(ichimokuCloud.includes('spanA'), true);
-    assert.equal(ichimokuCloud.includes('spanB'), true);
+    assert.strictEqual(ichimokuCloud.includes('base'), true);
+    assert.strictEqual(ichimokuCloud.includes('conversion'), true);
+    assert.strictEqual(ichimokuCloud.includes('spanA'), true);
+    assert.strictEqual(ichimokuCloud.includes('spanB'), true);
   });
 
   it('technical_analysis for bollinger percent', () => {
-    assert.equal(-0.2, ta.getBollingerBandPercent(80, 200, 100));
-    assert.equal(1.2, ta.getBollingerBandPercent(220, 200, 100));
-    assert.equal(0.5, ta.getBollingerBandPercent(150, 200, 100));
-    assert.equal(-0.25, ta.getBollingerBandPercent(75, 200, 100));
+    assert.strictEqual(-0.2, ta.getBollingerBandPercent(80, 200, 100));
+    assert.strictEqual(1.2, ta.getBollingerBandPercent(220, 200, 100));
+    assert.strictEqual(0.5, ta.getBollingerBandPercent(150, 200, 100));
+    assert.strictEqual(-0.25, ta.getBollingerBandPercent(75, 200, 100));
   });
 
   it('technical_analysis for pivot points', () => {
-    assert.deepEqual(ta.getPivotPoints([1, 2, 1], 2, 1), {});
-    assert.deepEqual(ta.getPivotPoints([1], 0, 0), {});
+    assert.deepStrictEqual(ta.getPivotPoints([1, 2, 1], 2, 1), {});
+    assert.deepStrictEqual(ta.getPivotPoints([1], 0, 0), {});
 
-    assert.deepEqual(ta.getPivotPoints([1, 2, 3, 4, 5, 4, 3, 2, 1], 4, 4), { high: 5 });
-    assert.deepEqual(ta.getPivotPoints([1, 6, 3, 4, 5, 4, 3, 2, 1], 4, 4), {});
-    assert.deepEqual(ta.getPivotPoints([1, 2, 3, 4, 5, 4, 3, 2, 6], 4, 4), {});
+    assert.deepStrictEqual(ta.getPivotPoints([1, 2, 3, 4, 5, 4, 3, 2, 1], 4, 4), { high: 5 });
+    assert.deepStrictEqual(ta.getPivotPoints([1, 6, 3, 4, 5, 4, 3, 2, 1], 4, 4), {});
+    assert.deepStrictEqual(ta.getPivotPoints([1, 2, 3, 4, 5, 4, 3, 2, 6], 4, 4), {});
 
-    assert.deepEqual(ta.getPivotPoints([5, 4, 3, 2, 1, 2, 3, 4, 5], 4, 4), { low: 1 });
-    assert.deepEqual(ta.getPivotPoints([5, 4, 3, 2, 1, 2, 3, 0, 5], 4, 4), {});
-    assert.deepEqual(ta.getPivotPoints([5, 0, 3, 2, 1, 2, 3, 4, 5], 4, 4), {});
+    assert.deepStrictEqual(ta.getPivotPoints([5, 4, 3, 2, 1, 2, 3, 4, 5], 4, 4), { low: 1 });
+    assert.deepStrictEqual(ta.getPivotPoints([5, 4, 3, 2, 1, 2, 3, 0, 5], 4, 4), {});
+    assert.deepStrictEqual(ta.getPivotPoints([5, 0, 3, 2, 1, 2, 3, 4, 5], 4, 4), {});
   });
 
   it('technical_analysis for pivot points with wicks for a range', () => {
     const highs = [1, 2, 3, 4, 5, 4, 3, 2, 1].map(v => {
       return { close: v, high: v * 1.2, low: v * 0.8 };
     });
-    assert.deepEqual(ta.getPivotPointsWithWicks(highs, 4, 4), { high: { close: 5, high: 6 } });
+    assert.deepStrictEqual(ta.getPivotPointsWithWicks(highs, 4, 4), { high: { close: 5, high: 6 } });
 
     const lows = [5, 4, 3, 2, 1, 2, 3, 4, 5].map(v => {
       return { close: v, high: v * 1.2, low: v * 0.8 };
     });
-    assert.deepEqual(ta.getPivotPointsWithWicks(lows, 4, 4), { low: { close: 1, low: 0.8 } });
+    assert.deepStrictEqual(ta.getPivotPointsWithWicks(lows, 4, 4), { low: { close: 1, low: 0.8 } });
+  });
+
+  it('technical_analysis for custom tulind indicator are returned', async () => {
+    const lookback = createCandleFixtures().reverse();
+
+    const indicators = new IndicatorBuilder();
+    indicators.add('tema', 'tulind', undefined, { indicator: 'tema', options: [21] });
+    indicators.add('ema_55', 'ema', undefined, { length: 55 });
+    indicators.add('tulind_ema_55', 'tulind', undefined, { indicator: 'ema', options: [55] });
+    indicators.add('macd', 'macd', undefined, { fast_length: 12, slow_length: 26, signal_length: 9 });
+
+    // replicate same 'macd' indicator with direct tulind function
+    indicators.add('tulind_macd', 'tulind', undefined, {
+      indicator: 'macd',
+      options: [12, 26, 9],
+      results: ['macd', 'signal', 'histogram']
+    });
+
+    // indicator with custom sources, values and results:
+    indicators.add('stoch', 'stoch', undefined, { length: 21, k: 5, d: 5 });
+    indicators.add('tulind_stoch', 'tulind', undefined, {
+      indicator: 'stoch',
+      sources: ['high', 'low', 'close'],
+      options: [21, 5, 5],
+      results: ['stoch_k', 'stoch_d']
+    });
+    const result = await ta.createIndicatorsLookback(lookback, indicators.all());
+
+    assert.strictEqual(result.tema.length, 430);
+    assert.strictEqual(8112, Math.round(result.tema[0]));
+
+    assert.strictEqual(result.ema_55.length, 490);
+    assert.strictEqual(result.tulind_ema_55.length, 490);
+
+    assert.strictEqual(8145, Math.round(result.ema_55[0]));
+    assert.strictEqual(8145, Math.round(result.tulind_ema_55[0]));
+
+    assert.deepStrictEqual(result.tulind_ema_55, result.ema_55);
+    assert.deepStrictEqual(result.tulind_macd, result.macd);
+    assert.deepStrictEqual(result.tulind_stoch, result.stoch);
   });
 });
