@@ -40,6 +40,10 @@ module.exports = class Position {
     this.raw = raw;
   }
 
+  getSide() {
+    return this.side;
+  }
+
   isShort() {
     return this.getSide() === Position.SIDE_SHORT;
   }
