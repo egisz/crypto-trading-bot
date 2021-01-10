@@ -42,15 +42,15 @@ module.exports = {
 
   /**
    * 
-   * @param {*} canles 
-   * @param {*} lenght 
+   * @param {*} candles 
+   * @param {*} length 
    */
   candles2MarketData: function(candles, length = 1000, keys = ['open', 'close', 'high', 'low', 'volume']) {
     return keys.reduce((acc, k) => ({ ...acc, [k]: candles.slice(-length).map(c => c[k]) }), {});
   },
 
   /**
-   * @param lookbacks oldest first
+   * @param lookback oldest first
    * @returns {Promise<any>}
    */
   getPredefinedIndicators: function(lookbacks) {
