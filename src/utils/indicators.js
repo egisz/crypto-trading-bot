@@ -99,23 +99,36 @@ function zigzag (ticks, deviation = 5, arraySize = -1) {
 
   return zigzag;
 }
-
-function executeTulindIndicator(source, indicator, tulindOptions) {
+/**
+ * Tulind indicator
+ *
+ * @see https://www.npmjs.com/package/tulind
+ *
+ * @param source - indicator's default source, like 'close', can be override with tulindOptions.sources to chain indicators
+ * @param indicator - object defining indicator options: 
+ *    @param key - name the result in indicators object
+ *    @param sources - (optional) - provide list of source keys used in indicator, check link to figure out what is expected for each indicator here https://tulipindicators.org/list
+ *                    if empty, we'll try to use 'close' as default
+ *    @param indicator - tulind indicator name, or if equals tulind, then we search tulind indicator name inside options.indicator.
+ *    @param options - must contain an array of indicator parameters, like length, etc, check link for more details https://tulipindicators.org/list
+ *    @param results - an array of returned values to extract from tulind indicator, see above link for details.
+ *                    if empty, we'll return only first returned value.
+ * @returns {Array}
+ */
+function executeTulindIndicator(source, { key, indicator, options, sources, results }) {
   return new Promise(resolve => {
-    const indicatorName = indicator.indicator === 'bb' ? 'bbands' : indicator.indicator;
-    let { sources, options = {} } = tulindOptions;
+    // tricky part:  tulind indicator name, if equals tulind, then we search tulind indicator name inside options.indicator.
+    const indicatorName = indicator === 'bb' ? 'bbands' : indicator;
 
     // extract indicator source data, for example if sources = ['open', 'high'], then it will map values from candles.
-    sources = sources ? sources.map(s => source.map(ss => ss[s])) : [source];
-
-    // set default indicator options
-    const indicatorOptions = indicator.options || {};
-    options = Object.keys(options).map(o => indicatorOptions[o] || options[o]);
+    const indicatorSources = sources ? 
+      sources.map(s => source.map(ss => ss[s])) :
+        source[0].close ?                           // sources not provided, but we got candles object - we extract 'close' values
+          [source.map(s => s.close)] : [source];
 
     // execute indicator
-    tulind.indicators[indicatorName].indicator(sources, options, function(err, res) {
+    tulind.indicators[indicatorName].indicator(indicatorSources, Array.isArray(options) ? options : [], function(err, res) {
       let finalResult = res[0];
-      const { results } = tulindOptions;
       if (results !== undefined) {
         // if indicator returns multiple results, extract them
         finalResult = res[0].map((r, i) => {
@@ -126,69 +139,82 @@ function executeTulindIndicator(source, indicator, tulindOptions) {
           return record;
         });
       }
-      resolve({ [indicator.key]: finalResult });
+      resolve({ [key]: finalResult });
     });
   });
 }
 
 module.exports = {
   // indicators which source is Candles
-  sourceCandle: ['cci', 'pivot_points_high_low', 'obv', 'ao', 'mfi', 'stoch', 'vwma', 'atr', 'adx', 'volume_profile', 'volume_by_price', 'ichimoku_cloud', 'zigzag', 'wicked', 'heikin_ashi', 'psar', 'hma'],
+  sourceCandle: ['tulind', 'cci', 'pivot_points_high_low', 'obv', 'ao', 'mfi', 'stoch', 'vwma', 'atr', 'adx', 'volume_profile', 'volume_by_price', 'ichimoku_cloud', 'zigzag', 'wicked', 'heikin_ashi', 'psar', 'hma'],
 
-  bb: (source, indicator) => 
-    executeTulindIndicator(source, indicator, {
-      options: { length: 20, stddev: 2 },
-      results: ['lower', 'middle', 'upper']
+  tulind: (source, { indicator, options, ...restOptions}) => 
+    executeTulindIndicator(source, { ...options, ...restOptions }),
+
+  bb: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source, {
+      results: ['lower', 'middle', 'upper'],
+      options: [options.length || 20, options.stddev || 2], 
+      ...restOptions 
     }),
 
-  obv: (...args) => executeTulindIndicator(...args, { sources: ['close', 'volume'] }),
-  ao: (...args) => executeTulindIndicator(...args, { sources: ['high', 'low'] }),
-  mfi: (...args) =>
-    executeTulindIndicator(...args, { sources: ['high', 'low', 'close', 'volume'], options: { length: 14 } }),
-  sma: (...args) => executeTulindIndicator(...args, { options: { length: 14 } }),
-  ema: (...args) => executeTulindIndicator(...args, { options: { length: 14 } }),
-  wma: (...args) => executeTulindIndicator(...args, { options: { length: 9 } }),
-  dema: (...args) => executeTulindIndicator(...args, { options: { length: 9 } }),
-  tema: (...args) => executeTulindIndicator(...args, { options: { length: 9 } }),
-  trima: (...args) => executeTulindIndicator(...args, { options: { length: 9 } }),
-  kama: (...args) => executeTulindIndicator(...args, { options: { length: 9 } }),
-  rsi: (...args) => executeTulindIndicator(...args, { options: { length: 14 } }),
-  roc: (...args) => executeTulindIndicator(...args, { options: { length: 6 } }),
-  atr: (...args) => executeTulindIndicator(...args, { sources: ['high', 'low', 'close'], options: { length: 14 } }),
+  obv: (source, { options, ...restOptions }) => 
+    executeTulindIndicator(source, { sources: ['close', 'volume'], options: [], ...restOptions }),
+  ao: (source, { options, ...restOptions}) => 
+    executeTulindIndicator(source, { sources: ['high', 'low'], options: [], ...restOptions }),
+  mfi: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source, { sources: ['high', 'low', 'close', 'volume'], options: [options.length || 14], ...restOptions }),
+  sma: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 14], ...restOptions }),
+  ema: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 14], ...restOptions }),
+  wma: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  dema: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  tema: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  trima: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  kama: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  rsi: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 14], ...restOptions }),
+  hma: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 9], ...restOptions }),
+  roc: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { options: [options.length || 6], ...restOptions }),
+  atr: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source,  { sources: ['high', 'low', 'close'], options: [options.length || 14], ...restOptions }),
+  
+  hma: (source, { options = {}, ...restOptions }) => {
+    let candleSource = options.source || 'close'
 
-  hma: (source, indicator) => {
-    let candleSource = (indicator.options && indicator.options.source) || 'close'
-
-    return executeTulindIndicator(source, indicator, {
+    return executeTulindIndicator(source, {
       sources: [candleSource],
-      options: { length: 9 }
-    })},
-
-  cci: (...args) =>
-    executeTulindIndicator(...args, {
+      options: [options.length || 9],
+      ...restOptions
+    })
+  },
+  
+  cci: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source, { 
       sources: ['high', 'low', 'close'],
-      options: { length: 20 }
+      options: [options.length || 20], 
+      ...restOptions
     }),
 
-  vwma: (...args) => executeTulindIndicator(...args, { sources: ['close', 'volume'], options: { length: 20 } }),
+  vwma: (source, { options = {}, ...restOptions }) => executeTulindIndicator(source, { sources: ['close', 'volume'], options: [options.length || 20], ...restOptions }),
 
-  stoch: (...args) =>
-    executeTulindIndicator(...args, {
+  stoch: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source,  { 
       sources: ['high', 'low', 'close'],
-      options: { length: 14, k: 3, d: 3 },
-      results: ['stoch_k', 'stoch_d']
+      options: [options.length || 14, options.k || 3, options.d || 3],       
+      results: ['stoch_k', 'stoch_d'],
+      ...restOptions      
     }),
 
-  macd: (...args) =>
-    executeTulindIndicator(...args, {
-      options: { fast_length: 12, slow_length: 26, signal_length: 9 },
-      results: ['macd', 'signal', 'histogram']
+  macd: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source,  {
+      options: [options.fast_length || 12, options.slow_length || 26, options.signal_length || 9],
+      results: ['macd', 'signal', 'histogram'],
+      ...restOptions      
     }),
 
-  adx: (...args) =>
-    executeTulindIndicator(...args, {
+  adx: (source, { options = {}, ...restOptions }) =>
+    executeTulindIndicator(source,  { 
       sources: ['high', 'low', 'close'],
-      options: { length: 14 }
+      options: [options.length || 14],
+      ...restOptions      
     }),
 
   macd_ext: function(source, indicator) {
