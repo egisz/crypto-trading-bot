@@ -29,6 +29,7 @@ module.exports = class CryptoComExchange {
     this.ccxtExchangeOrder = CcxtExchangeOrder.createEmpty(logger);
 
     this.positions = {};
+    this.balances = {};
     this.orders = {};
     this.tickers = {};
     this.symbols = [];
@@ -89,14 +90,7 @@ module.exports = class CryptoComExchange {
       // options: { defaultType: 'future', warnOnFetchOpenOrdersWithoutSymbol: false }
     }));
 
-    // const ccxtProClient = (this.ccxtProClient = new ccxtPro.cryptocom({
-    //   apiKey: config.key,
-    //   secret: config.secret
-    //   // options: { defaultType: 'future', warnOnFetchOpenOrdersWithoutSymbol: false }
-    // }));
-
     this.intervals = [];
-
     this.symbols = symbols;
     this.positions = {};
     this.orders = {};
@@ -105,35 +99,23 @@ module.exports = class CryptoComExchange {
     const me = this;
 
     if (config.key && config.secret && config.key.length > 0 && config.secret.length > 0) {
-      setInterval(async () => {
-        me.throttler.addTask('cryptocom_sync_orders', async () => {
-          await me.ccxtExchangeOrder.syncOrders();
-        });
-      }, 1000 * 30);
+      //TODO: uncomment after testing
+      // setInterval(async () => {
+      //   me.throttler.addTask('cryptocom_sync_orders', async () => {
+      //     await me.ccxtExchangeOrder.syncOrders();
+      //   });
+      // }, 1000 * 30);
 
       setInterval(async () => {
         me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
       }, 1000 * 36);
 
-      // setTimeout(async () => {
-      //   while (true) {
-      //     try {
-      //       const positions = await this.ccxtProClient.watchPositions();
-      //       CryptoComExchange.createPositionsWithOpenStateOnly(positions).forEach(position => {
-      //         me.positions[position.symbol] = position;
-      //       });
-      //     } catch (e) {
-      //       console.error(`${this.getName()}: watchPositions error: ${e.message}`);
-      //       this.logger.error(`${this.getName()}: watchPositions error: ${e.message}`);
-      //     }
-      //   }
-      // }, 1000);
-
       setTimeout(async () => {
         await ccxtClient.fetchMarkets();
-        me.throttler.addTask('cryptocom_sync_orders', async () => {
-          await me.ccxtExchangeOrder.syncOrders();
-        });
+        //TODO: uncomment after testing
+        // me.throttler.addTask('cryptocom_sync_orders', async () => {
+        //   await me.ccxtExchangeOrder.syncOrders();
+        // });
         me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
       }, 1000);
 
@@ -361,7 +343,7 @@ module.exports = class CryptoComExchange {
   async syncPositionViaRestApi() {
     let response;
     try {
-      response = await this.ccxtClient.fapiPrivateGetPositionRisk();
+      response = await this.ccxtClient.fetchPositions();
     } catch (e) {
       this.logger.error(`${this.getName()}: error getting positions:${e}`);
       return;
@@ -508,24 +490,21 @@ module.exports = class CryptoComExchange {
         } else if (method?.toLowerCase() === 'public/auth') {
           if (code == 0) {
             me.logger.info(`${me.getName()}: Authenticated`);
-            exchangeWS.subscribe(['user.order', 'user.positions']);
+            exchangeWS.subscribe(['user.order', 'user.positions', 'user.balance']);
           }
         } else if (method?.toLowerCase() === 'subscribe') {
           if (code == 0 && result?.channel === 'user.order' && result?.data?.length) {
             me.logger.info(`${me.getName()}: User orders update: ${JSON.stringify(result.data)}`);
-            result.data.forEach(msgOrder => {
-              const order = me.ccxtClient.parseOrder(msgOrder);
+            result.data.forEach(order => {
+              // const order = me.ccxtClient.parseOrder(msgOrder);
               // const order = CryptoComExchange.createRestOrderFromWebsocket(msgOrder);
               me.ccxtExchangeOrder.triggerPlainOrder(order);
               me.logger.info(`${me.getName()}: User order update: ${JSON.stringify(order)}`);
             });
-            me.throttler.addTask(
-              'cryptocom_sync_orders',
-              async () => {
-                await me.ccxtExchangeOrder.syncOrders();
-              },
-              3000
-            );
+          } else if (code == 0 && result?.channel === 'user.balance' && result?.data?.length) {
+            // console.log(`${me.getName()}: User balance update: ${result.data}`);
+            me.balances = me.ccxtClient.parseBalance(message);
+            // me.logger.info(`${me.getName()}: User balance update: ${JSON.stringify(me.balances)}`);
           }
         }
 
@@ -563,17 +542,17 @@ module.exports = class CryptoComExchange {
     // ccxt id and binance ids are not matching
     const CcxtExchangeOrderExtends = class extends CcxtExchangeOrder {
       async createOrder(order) {
-        order.symbol = order.symbol.replace('USDT', '_USDT');
+        order.symbol = order.symbol.replace('USDT', '/USDT');
         return super.createOrder(order);
       }
     };
 
     return new CcxtExchangeOrderExtends(ccxtClient, symbols, logger, {
       cancelOrder: (client, args) => {
-        return { symbol: args.symbol.replace('USDT', '_USDT') };
+        return { symbol: args.symbol.replace('USDT', '/USDT') };
       },
       convertOrder: (client, order) => {
-        order.symbol = order.symbol.replace('_USDT', 'USDT');
+        order.symbol = order.symbol.replace('/', '');
 
         // ccxt does not pipe the stopPrice
         if (['trailing_stop_market', 'stop_market'].includes(order.type) && order.info.stopPrice) {
