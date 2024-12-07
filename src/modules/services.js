@@ -63,6 +63,7 @@ const CoinbasePro = require('../exchange/coinbase_pro');
 const Bitfinex = require('../exchange/bitfinex');
 const Bybit = require('../exchange/bybit');
 const BybitUnified = require('../exchange/bybit_unified');
+const CryptoCom = require('../exchange/cryptocom.js');
 const Noop = require('../exchange/noop');
 
 const ExchangeCandleCombine = require('../modules/exchange/exchange_candle_combine');
@@ -124,7 +125,7 @@ let throttler;
 const parameters = {};
 
 module.exports = {
-  boot: async function(projectDir) {
+  boot: async function (projectDir) {
     parameters.projectDir = projectDir;
 
     try {
@@ -161,7 +162,7 @@ module.exports = {
     return (db = myDb);
   },
 
-  getTa: function() {
+  getTa: function () {
     if (ta) {
       return ta;
     }
@@ -169,20 +170,15 @@ module.exports = {
     return (ta = new Ta(this.getCandlestickRepository(), this.getInstances(), this.getTickers()));
   },
 
-  getBacktest: function() {
+  getBacktest: function () {
     if (backtest) {
       return backtest;
     }
 
-    return (backtest = new Backtest(
-      this.getInstances(),
-      this.getStrategyManager(),
-      this.getExchangeCandleCombine(),
-      parameters.projectDir
-    ));
+    return (backtest = new Backtest(this.getInstances(), this.getStrategyManager(), this.getExchangeCandleCombine(), parameters.projectDir));
   },
 
-  getStopLossCalculator: function() {
+  getStopLossCalculator: function () {
     if (stopLossCalculator) {
       return stopLossCalculator;
     }
@@ -190,7 +186,7 @@ module.exports = {
     return (stopLossCalculator = new StopLossCalculator(this.getTickers(), this.getLogger()));
   },
 
-  getRiskRewardRatioCalculator: function() {
+  getRiskRewardRatioCalculator: function () {
     if (riskRewardRatioCalculator) {
       return riskRewardRatioCalculator;
     }
@@ -198,7 +194,7 @@ module.exports = {
     return (riskRewardRatioCalculator = new RiskRewardRatioCalculator(this.getLogger()));
   },
 
-  getCandleImporter: function() {
+  getCandleImporter: function () {
     if (candleStickImporter) {
       return candleStickImporter;
     }
@@ -206,7 +202,7 @@ module.exports = {
     return (candleStickImporter = new CandleImporter(this.getCandlestickRepository()));
   },
 
-  getCreateOrderListener: function() {
+  getCreateOrderListener: function () {
     if (createOrderListener) {
       return createOrderListener;
     }
@@ -214,7 +210,7 @@ module.exports = {
     return (createOrderListener = new CreateOrderListener(this.getExchangeManager(), this.getLogger()));
   },
 
-  getTickListener: function() {
+  getTickListener: function () {
     if (tickListener) {
       return tickListener;
     }
@@ -234,7 +230,7 @@ module.exports = {
     ));
   },
 
-  getExchangeOrderWatchdogListener: function() {
+  getExchangeOrderWatchdogListener: function () {
     if (exchangeOrderWatchdogListener) {
       return exchangeOrderWatchdogListener;
     }
@@ -251,7 +247,7 @@ module.exports = {
     ));
   },
 
-  getTickerDatabaseListener: function() {
+  getTickerDatabaseListener: function () {
     if (tickerDatabaseListener) {
       return tickerDatabaseListener;
     }
@@ -259,7 +255,7 @@ module.exports = {
     return (tickerDatabaseListener = new TickerDatabaseListener(this.getTickerRepository()));
   },
 
-  getSignalLogger: function() {
+  getSignalLogger: function () {
     if (signalLogger) {
       return signalLogger;
     }
@@ -267,7 +263,7 @@ module.exports = {
     return (signalLogger = new SignalLogger(this.getSignalRepository()));
   },
 
-  getSignalHttp: function() {
+  getSignalHttp: function () {
     if (signalHttp) {
       return signalHttp;
     }
@@ -275,7 +271,7 @@ module.exports = {
     return (signalHttp = new SignalHttp(this.getSignalRepository()));
   },
 
-  getSignalRepository: function() {
+  getSignalRepository: function () {
     if (signalRepository) {
       return signalRepository;
     }
@@ -283,7 +279,7 @@ module.exports = {
     return (signalRepository = new SignalRepository(this.getDatabase()));
   },
 
-  getCandlestickRepository: function() {
+  getCandlestickRepository: function () {
     if (candlestickRepository) {
       return candlestickRepository;
     }
@@ -291,7 +287,7 @@ module.exports = {
     return (candlestickRepository = new CandlestickRepository(this.getDatabase()));
   },
 
-  getEventEmitter: function() {
+  getEventEmitter: function () {
     if (eventEmitter) {
       return eventEmitter;
     }
@@ -299,7 +295,7 @@ module.exports = {
     return (eventEmitter = new events.EventEmitter());
   },
 
-  getLogger: function() {
+  getLogger: function () {
     if (logger) {
       return logger;
     }
@@ -325,21 +321,14 @@ module.exports = {
     const config = this.getConfig();
     const telegram = _.get(config, 'log.telegram');
 
-    if (
-      telegram &&
-      telegram.chatId &&
-      telegram.chatId.length > 0 &&
-      telegram.token &&
-      telegram.token.length > 0 &&
-      telegram.chatId.length > 0
-    ) {
+    if (telegram && telegram.chatId && telegram.chatId.length > 0 && telegram.token && telegram.token.length > 0 && telegram.chatId.length > 0) {
       logger.add(new WinstonTelegramLogger(telegram));
     }
 
     return logger;
   },
 
-  getNotifier: function() {
+  getNotifier: function () {
     const notifiers = [];
 
     const config = this.getConfig();
@@ -362,7 +351,7 @@ module.exports = {
     return (notify = new Notify(notifiers));
   },
 
-  getTickers: function() {
+  getTickers: function () {
     if (tickers) {
       return tickers;
     }
@@ -370,7 +359,7 @@ module.exports = {
     return (tickers = new Tickers());
   },
 
-  getStrategyManager: function() {
+  getStrategyManager: function () {
     if (strategyManager) {
       return strategyManager;
     }
@@ -383,7 +372,7 @@ module.exports = {
     ));
   },
 
-  createWebserverInstance: function() {
+  createWebserverInstance: function () {
     return new Http(
       this.getSystemUtil(),
       this.getTa(),
@@ -400,59 +389,39 @@ module.exports = {
     );
   },
 
-  getExchangeManager: function() {
+  getExchangeManager: function () {
     if (exchangeManager) {
       return exchangeManager;
     }
 
-    return (exchangeManager = new ExchangeManager(
-      this.getExchanges(),
-      this.getLogger(),
-      this.getInstances(),
-      this.getConfig()
-    ));
+    return (exchangeManager = new ExchangeManager(this.getExchanges(), this.getLogger(), this.getInstances(), this.getConfig()));
   },
 
-  getOrderExecutor: function() {
+  getOrderExecutor: function () {
     if (orderExecutor) {
       return orderExecutor;
     }
 
-    return (orderExecutor = new OrderExecutor(
-      this.getExchangeManager(),
-      this.getTickers(),
-      this.getSystemUtil(),
-      this.getLogger()
-    ));
+    return (orderExecutor = new OrderExecutor(this.getExchangeManager(), this.getTickers(), this.getSystemUtil(), this.getLogger()));
   },
 
-  getOrderCalculator: function() {
+  getOrderCalculator: function () {
     if (orderCalculator) {
       return orderCalculator;
     }
 
-    return (orderCalculator = new OrderCalculator(
-      this.getTickers(),
-      this.getLogger(),
-      this.getExchangeManager(),
-      this.getPairConfig()
-    ));
+    return (orderCalculator = new OrderCalculator(this.getTickers(), this.getLogger(), this.getExchangeManager(), this.getPairConfig()));
   },
 
-  getHttpPairs: function() {
+  getHttpPairs: function () {
     if (pairsHttp) {
       return pairsHttp;
     }
 
-    return (pairsHttp = new PairsHttp(
-      this.getInstances(),
-      this.getExchangeManager(),
-      this.getPairStateManager(),
-      this.getEventEmitter()
-    ));
+    return (pairsHttp = new PairsHttp(this.getInstances(), this.getExchangeManager(), this.getPairStateManager(), this.getEventEmitter()));
   },
 
-  getPairConfig: function() {
+  getPairConfig: function () {
     if (pairConfig) {
       return pairConfig;
     }
@@ -460,7 +429,7 @@ module.exports = {
     return (pairConfig = new PairConfig(this.getInstances()));
   },
 
-  getPairStateManager: function() {
+  getPairStateManager: function () {
     if (pairStateManager) {
       return pairStateManager;
     }
@@ -474,7 +443,7 @@ module.exports = {
     ));
   },
 
-  getPairStateExecution: function() {
+  getPairStateExecution: function () {
     if (pairStateExecution) {
       return pairStateExecution;
     }
@@ -488,7 +457,7 @@ module.exports = {
     ));
   },
 
-  getSystemUtil: function() {
+  getSystemUtil: function () {
     if (systemUtil) {
       return systemUtil;
     }
@@ -496,7 +465,7 @@ module.exports = {
     return (systemUtil = new SystemUtil(this.getConfig()));
   },
 
-  getTechnicalAnalysisValidator: function() {
+  getTechnicalAnalysisValidator: function () {
     if (technicalAnalysisValidator) {
       return technicalAnalysisValidator;
     }
@@ -504,7 +473,7 @@ module.exports = {
     return (technicalAnalysisValidator = new TechnicalAnalysisValidator());
   },
 
-  getLogsRepository: function() {
+  getLogsRepository: function () {
     if (logsRepository) {
       return logsRepository;
     }
@@ -512,7 +481,7 @@ module.exports = {
     return (logsRepository = new LogsRepository(this.getDatabase()));
   },
 
-  getLogsHttp: function() {
+  getLogsHttp: function () {
     if (logsHttp) {
       return logsHttp;
     }
@@ -520,7 +489,7 @@ module.exports = {
     return (logsHttp = new LogsHttp(this.getLogsRepository()));
   },
 
-  getTickerLogRepository: function() {
+  getTickerLogRepository: function () {
     if (tickerLogRepository) {
       return tickerLogRepository;
     }
@@ -528,7 +497,7 @@ module.exports = {
     return (tickerLogRepository = new TickerLogRepository(this.getDatabase()));
   },
 
-  getTickerRepository: function() {
+  getTickerRepository: function () {
     if (tickerRepository) {
       return tickerRepository;
     }
@@ -536,7 +505,7 @@ module.exports = {
     return (tickerRepository = new TickerRepository(this.getDatabase(), this.getLogger()));
   },
 
-  getCandlestickResample: function() {
+  getCandlestickResample: function () {
     if (candlestickResample) {
       return candlestickResample;
     }
@@ -544,7 +513,7 @@ module.exports = {
     return (candlestickResample = new CandlestickResample(this.getCandlestickRepository(), this.getCandleImporter()));
   },
 
-  getRequestClient: function() {
+  getRequestClient: function () {
     if (requestClient) {
       return requestClient;
     }
@@ -552,7 +521,7 @@ module.exports = {
     return (requestClient = new RequestClient(this.getLogger()));
   },
 
-  getQueue: function() {
+  getQueue: function () {
     if (queue) {
       return queue;
     }
@@ -560,7 +529,7 @@ module.exports = {
     return (queue = new Queue());
   },
 
-  getCandleExportHttp: function() {
+  getCandleExportHttp: function () {
     if (candleExportHttp) {
       return candleExportHttp;
     }
@@ -568,21 +537,15 @@ module.exports = {
     return (candleExportHttp = new CandleExportHttp(this.getCandlestickRepository(), this.getPairConfig()));
   },
 
-  getOrdersHttp: function() {
+  getOrdersHttp: function () {
     if (ordersHttp) {
       return ordersHttp;
     }
 
-    return (ordersHttp = new OrdersHttp(
-      this.getBacktest(),
-      this.getTickers(),
-      this.getOrderExecutor(),
-      this.getExchangeManager(),
-      this.getPairConfig()
-    ));
+    return (ordersHttp = new OrdersHttp(this.getBacktest(), this.getTickers(), this.getOrderExecutor(), this.getExchangeManager(), this.getPairConfig()));
   },
 
-  getExchangeCandleCombine: function() {
+  getExchangeCandleCombine: function () {
     if (exchangeCandleCombine) {
       return exchangeCandleCombine;
     }
@@ -590,19 +553,15 @@ module.exports = {
     return (exchangeCandleCombine = new ExchangeCandleCombine(this.getCandlestickRepository()));
   },
 
-  getExchangePositionWatcher: function() {
+  getExchangePositionWatcher: function () {
     if (exchangePositionWatcher) {
       return exchangePositionWatcher;
     }
 
-    return (exchangePositionWatcher = new ExchangePositionWatcher(
-      this.getExchangeManager(),
-      this.getEventEmitter(),
-      this.getLogger()
-    ));
+    return (exchangePositionWatcher = new ExchangePositionWatcher(this.getExchangeManager(), this.getEventEmitter(), this.getLogger()));
   },
 
-  getThrottler: function() {
+  getThrottler: function () {
     if (throttler) {
       return throttler;
     }
@@ -610,20 +569,13 @@ module.exports = {
     return (throttler = new Throttler(this.getLogger()));
   },
 
-  getExchanges: function() {
+  getExchanges: function () {
     if (exchanges) {
       return exchanges;
     }
 
     return (exchanges = [
-      new Bitmex(
-        this.getEventEmitter(),
-        this.getRequestClient(),
-        this.getCandlestickResample(),
-        this.getLogger(),
-        this.getQueue(),
-        this.getCandleImporter()
-      ),
+      new Bitmex(this.getEventEmitter(), this.getRequestClient(), this.getCandlestickResample(), this.getLogger(), this.getQueue(), this.getCandleImporter()),
       new BitmexTestnet(
         this.getEventEmitter(),
         this.getRequestClient(),
@@ -632,20 +584,8 @@ module.exports = {
         this.getQueue(),
         this.getCandleImporter()
       ),
-      new Binance(
-        this.getEventEmitter(),
-        this.getLogger(),
-        this.getQueue(),
-        this.getCandleImporter(),
-        this.getThrottler()
-      ),
-      new BinanceMargin(
-        this.getEventEmitter(),
-        this.getLogger(),
-        this.getQueue(),
-        this.getCandleImporter(),
-        this.getThrottler()
-      ),
+      new Binance(this.getEventEmitter(), this.getLogger(), this.getQueue(), this.getCandleImporter(), this.getThrottler()),
+      new BinanceMargin(this.getEventEmitter(), this.getLogger(), this.getQueue(), this.getCandleImporter(), this.getThrottler()),
       new BinanceFutures(
         this.getEventEmitter(),
         this.getRequestClient(),
@@ -664,19 +604,8 @@ module.exports = {
         this.getCandleImporter(),
         this.getThrottler()
       ),
-      new CoinbasePro(
-        this.getEventEmitter(),
-        this.getLogger(),
-        this.getCandlestickResample(),
-        this.getQueue(),
-        this.getCandleImporter()
-      ),
-      new Bitfinex(
-	this.getEventEmitter(),
-	this.getLogger(),
-	this.getRequestClient(),
-	this.getCandleImporter()
-      ),
+      new CoinbasePro(this.getEventEmitter(), this.getLogger(), this.getCandlestickResample(), this.getQueue(), this.getCandleImporter()),
+      new Bitfinex(this.getEventEmitter(), this.getLogger(), this.getRequestClient(), this.getCandleImporter()),
       new Bybit(
         this.getEventEmitter(),
         this.getRequestClient(),
@@ -695,11 +624,20 @@ module.exports = {
         this.getCandleImporter(),
         this.getThrottler()
       ),
+      new CryptoCom(
+        this.getEventEmitter(),
+        this.getRequestClient(),
+        this.getCandlestickResample(),
+        this.getLogger(),
+        this.getQueue(),
+        this.getCandleImporter(),
+        this.getThrottler()
+      ),
       new Noop()
     ]);
   },
 
-  createTradeInstance: function() {
+  createTradeInstance: function () {
     this.getExchangeManager().init();
 
     return new Trade(
@@ -720,11 +658,11 @@ module.exports = {
     );
   },
 
-  getBackfill: function() {
+  getBackfill: function () {
     return new Backfill(this.getExchanges(), this.getCandleImporter());
   },
 
-  createMailer: function() {
+  createMailer: function () {
     const mail = require('nodemailer');
 
     const config = this.getConfig();
@@ -740,7 +678,7 @@ module.exports = {
     });
   },
 
-  createTelegram: function() {
+  createTelegram: function () {
     const { Telegraf } = require('telegraf');
     const config = this.getConfig();
     const { token } = config.notify.telegram;

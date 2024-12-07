@@ -9,3 +9,4 @@ bot.db
 bot.db-shm
 bot.db-wal
 ./var/
+node_modules
