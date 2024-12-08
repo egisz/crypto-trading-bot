@@ -16,6 +16,8 @@ const ExchangeCandlestick = require('../dict/exchange_candlestick');
 const Position = require('../dict/position');
 const CcxtExchangeOrder = require('./ccxt/ccxt_exchange_order');
 const CommonUtil = require('../utils/common_util');
+const TradesUtil = require('./utils/trades_util');
+const { channel } = require('diagnostics_channel');
 
 module.exports = class CryptoComExchange {
   constructor(eventEmitter, requestClient, candlestickResample, logger, queue, candleImporter, throttler) {
@@ -192,19 +194,91 @@ module.exports = class CryptoComExchange {
     return this.ccxtExchangeOrder.getOrdersForSymbol(symbol);
   }
 
+  // took from binance_margin.js
   async getPositions() {
-    return Object.values(this.positions).map(position => {
-      // overwrite profits by ticker price from position; ticker prices are more fresh
-      if (position.getEntry() && this.tickers[position.getSymbol()]) {
-        const profit = position.isLong()
-          ? (this.tickers[position.symbol].bid / position.entry - 1) * 100 // long profit
-          : (position.entry / this.tickers[position.symbol].ask - 1) * 100; // short profit
+    const positions = [];
 
-        return Position.createProfitUpdate(position, profit);
+    // get pairs with capital to fake open positions
+    const capitals = {};
+    this.symbols
+      .filter(
+        s =>
+          s.trade &&
+          ((s.trade.capital && s.trade.capital > 0) ||
+            (s.trade.currency_capital && s.trade.currency_capital > 0) ||
+            (s.trade.strategies && s.trade.strategies.length > 0))
+      )
+      .forEach(s => {
+        if (s.trade.capital > 0) {
+          capitals[s.symbol] = s.trade.capital;
+        } else if (s.trade.currency_capital > 0 && this.tickers[s.symbol] && this.tickers[s.symbol].bid) {
+          capitals[s.symbol] = s.trade.currency_capital / this.tickers[s.symbol].bid;
+        } else {
+          capitals[s.symbol] = 0;
+        }
+      });
+
+    if (!this.balances?.free) return positions;
+
+    for (const asset of Object.keys(this.balances.free)) {
+      const available = this.balances.free[asset];
+
+      const assetPositions = [];
+
+      for (const pair in capitals) {
+        // just a hack to get matching pairs with capital eg: "BTCUSDT" needs a capital of "BTC"
+        if (!pair.startsWith(asset)) {
+          continue;
+        }
+
+        // 1% balance left indicate open position
+        const pairCapital = capitals[pair];
+        if (pairCapital == 0 || Math.abs(Math.abs(available) / pairCapital) < 0.1) {
+          continue;
+        }
+
+        let entry;
+        let createdAt;
+
+        // try to find a entry price, based on trade history
+        const side = available < 0 ? 'short' : 'long';
+
+        const trades = this.trades[pair];
+        if (trades && trades.length > 0) {
+          const positionEntry = TradesUtil.findPositionEntryFromTrades(trades, Math.abs(available), side);
+
+          if (positionEntry) {
+            entry = positionEntry.average_price;
+            createdAt = positionEntry.time;
+          }
+        }
+
+        // calculate profit based on the ticker price
+        let profit;
+        if (entry && this.tickers[pair]) {
+          profit = (this.tickers[pair].bid / entry - 1) * 100;
+
+          // inverse profit for short
+          if (side === 'short') {
+            profit *= -1;
+          }
+        }
+
+        assetPositions.push(Position.create(pair, available, new Date(), createdAt, entry, profit));
       }
 
-      return position;
-    });
+      if (assetPositions.length > 0) {
+        // on multiple pair path orders with latest date wins
+        const assetPositionsOrdered = assetPositions.sort(
+          // order by latest
+          (a, b) => (b.createdAt ? b.createdAt : new Date('1970-01-01')) - (a.createdAt ? a.createdAt : new Date('1970-01-01'))
+        );
+
+        positions.push(assetPositionsOrdered[0]);
+      }
+    }
+
+    return positions;
   }
 
   async getPositionForSymbol(symbol) {
@@ -365,8 +439,9 @@ module.exports = class CryptoComExchange {
 
     const allSubscriptions = [];
     symbols.forEach(symbol => {
-      allSubscriptions.push(`${symbol.symbol.toLowerCase()}@bookTicker`);
-      allSubscriptions.push(...symbol.periods.map(p => `${symbol.symbol.toLowerCase()}@kline_${p}`));
+      const symbolUpdated = symbol.symbol.replace('USDT', '_USDT');
+      allSubscriptions.push(`ticker.${symbolUpdated.toUpperCase()}`);
+      allSubscriptions.push(...symbol.periods.map(p => `candlestick.${p}.${symbolUpdated.toUpperCase()}`));
     });
 
     me.logger.info(`${this.getName()}: Public stream subscriptions: ${allSubscriptions.length}`);
@@ -386,7 +461,6 @@ module.exports = class CryptoComExchange {
    */
   initPublicWebsocketChunk(subscriptions, indexConnection) {
     const me = this;
-    // const ws = new WebSocket('wss://uat-stream.3ona.co/exchange/v1/market'); // Sandbox
     const ws = new WebSocket('wss://stream.crypto.com/exchange/v1/market');
 
     ws.onerror = function (event) {
@@ -408,7 +482,9 @@ module.exports = class CryptoComExchange {
           ws.send(
             JSON.stringify({
               method: 'subscribe',
-              params: subscriptionChunk,
+              params: {
+                channels: subscriptionChunk
+              },
               id: Math.floor(Math.random() * Math.floor(100))
             })
           );
@@ -422,32 +498,79 @@ module.exports = class CryptoComExchange {
       if (event.type && event.type === 'message') {
         const body = JSON.parse(event.data);
 
-        const { method, id } = body;
+        const { method, id, result } = body;
         if (method && method.toLowerCase() === 'public/heartbeat') {
           me.logger.info(`${me.getName()}: Heartbeat`);
           ws.send(JSON.stringify({ id: id, method: 'public/respond-heartbeat' }));
+          return;
         }
-        if (body.stream && body.stream.toLowerCase().includes('@bookticker')) {
+
+        if (method && method.toLowerCase() === 'subscribe' && channel === 'ticker') {
+          //   "id": -1,
+          //   "method": "subscribe",
+          //   "code": 0,
+          //   "result": {
+          //     "instrument_name": "BTCUSD-PERP",
+          //     "subscription": "ticker.BTCUSD-PERP",
+          //     "channel": "ticker",
+          //     "data": [{
+          //       "h": "51790.00",        // Price of the 24h highest trade
+          //       "l": "47895.50",        // Price of the 24h lowest trade, null if there weren't any trades
+          //       "a": "51174.500000",    // The price of the latest trade, null if there weren't any trades
+          //       "c": "0.03955106",      // 24-hour price change, null if there weren't any trades
+          //       "b": "51170.000000",    // The current best bid price, null if there aren't any bids
+          //       "bs": "0.1000",         // The current best bid size, null if there aren't any bids
+          //       "k": "51180.000000",    // The current best ask price, null if there aren't any asks
+          //       "ks": "0.2000",         // The current best ask size, null if there aren't any bids
+          //       "i": "BTCUSD-PERP",     // Instrument name
+          //       "v": "879.5024",        // The total 24h traded volume
+          //       "vv": "26370000.12",    // The total 24h traded volume value (in USD)
+          //       "oi": "12345.12",       // Open interest
+          //       "t": 1613580710768
+          //     }]
+          //   }
+          // }
+          const { instrument_name, data } = result;
           me.eventEmitter.emit(
             'ticker',
             new TickerEvent(
               me.getName(),
-              body.data.s,
-              (me.tickers[body.data.s] = new Ticker(me.getName(), body.data.s, moment().format('X'), parseFloat(body.data.b), parseFloat(body.data.a)))
+              instrument_name,
+              (me.tickers[instrument_name] = new Ticker(me.getName(), instrument_name, moment().format('X'), parseFloat(data.b), parseFloat(data.a)))
             )
           );
-        } else if (body.stream && body.stream.toLowerCase().includes('@kline')) {
+        } else if (method && method.toLowerCase() === 'subscribe' && channel === 'candlestick') {
+          // {
+          //   "id": 1,
+          //   "method": "subscribe",
+          //   "code": 0,
+          //   "result": {
+          //     "instrument_name": "BTCUSD-PERP",
+          //     "subscription": "candlestick.1D.BTCUSD-PERP",
+          //     "channel": "candlestick",
+          //     "interval": "1D",
+          //     "data": [{
+          //       "o": "51140.500000",    // Open price
+          //       "h": "51699.000000",    // High price
+          //       "l": "49212.000000",    // Low price
+          //       "c": "51313.500000",    // Close price
+          //       "v": "867.9432",        // Volume
+          //       "t": 1612224000000      // Start time
+          //     }]
+          //   }
+          // }
+          const { instrument_name, data, interval } = result;
           await me.candleImporter.insertThrottledCandles([
             new ExchangeCandlestick(
               me.getName(),
-              body.data.s,
-              body.data.k.i,
-              Math.round(body.data.k.t / 1000),
-              parseFloat(body.data.k.o),
-              parseFloat(body.data.k.h),
-              parseFloat(body.data.k.l),
-              parseFloat(body.data.k.c),
-              parseFloat(body.data.k.v)
+              instrument_name,
+              interval,
+              Math.round(data.t / 1000),
+              parseFloat(data.o),
+              parseFloat(data.h),
+              parseFloat(data.l),
+              parseFloat(data.c),
+              parseFloat(data.v)
             )
           ]);
         }
