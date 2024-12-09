@@ -17,7 +17,6 @@ const Position = require('../dict/position');
 const CcxtExchangeOrder = require('./ccxt/ccxt_exchange_order');
 const CommonUtil = require('../utils/common_util');
 const TradesUtil = require('./utils/trades_util');
-const { channel } = require('diagnostics_channel');
 
 module.exports = class CryptoComExchange {
   constructor(eventEmitter, requestClient, candlestickResample, logger, queue, candleImporter, throttler) {
@@ -240,18 +239,17 @@ module.exports = class CryptoComExchange {
         let entry;
         let createdAt;
 
-        // try to find a entry price, based on trade history
-        const side = available < 0 ? 'short' : 'long';
-
-        const trades = this.trades[pair];
-        if (trades && trades.length > 0) {
-          const positionEntry = TradesUtil.findPositionEntryFromTrades(trades, Math.abs(available), side);
+        if (this.trades && this.trades[pair] && this.trades[pair].length > 0) {
+          const positionEntry = TradesUtil.findPositionEntryFromTrades(this.trades[pair], Math.abs(available), side);
 
           if (positionEntry) {
             entry = positionEntry.average_price;
             createdAt = positionEntry.time;
           }
         }
+
+        // try to find a entry price, based on trade history
+        const side = available < 0 ? 'short' : 'long';
 
         // calculate profit based on the ticker price
         let profit;
@@ -505,7 +503,7 @@ module.exports = class CryptoComExchange {
           return;
         }
 
-        if (method && method.toLowerCase() === 'subscribe' && channel === 'ticker') {
+        if (method && method.toLowerCase() === 'subscribe' && result?.channel === 'ticker') {
           //   "id": -1,
           //   "method": "subscribe",
           //   "code": 0,
@@ -531,15 +529,17 @@ module.exports = class CryptoComExchange {
           //   }
           // }
           const { instrument_name, data } = result;
-          me.eventEmitter.emit(
-            'ticker',
-            new TickerEvent(
-              me.getName(),
-              instrument_name,
-              (me.tickers[instrument_name] = new Ticker(me.getName(), instrument_name, moment().format('X'), parseFloat(data.b), parseFloat(data.a)))
-            )
-          );
-        } else if (method && method.toLowerCase() === 'subscribe' && channel === 'candlestick') {
+          const updatedSymol = instrument_name.replace('_', '');
+          if (data.length)
+            me.eventEmitter.emit(
+              'ticker',
+              new TickerEvent(
+                me.getName(),
+                updatedSymol,
+                (me.tickers[updatedSymol] = new Ticker(me.getName(), updatedSymol, moment().format('X'), parseFloat(data[0].b), parseFloat(data[0].a)))
+              )
+            );
+        } else if (method && method.toLowerCase() === 'subscribe' && result?.channel === 'candlestick') {
           // {
           //   "id": 1,
           //   "method": "subscribe",
@@ -560,19 +560,23 @@ module.exports = class CryptoComExchange {
           //   }
           // }
           const { instrument_name, data, interval } = result;
-          await me.candleImporter.insertThrottledCandles([
-            new ExchangeCandlestick(
-              me.getName(),
-              instrument_name,
-              interval,
-              Math.round(data.t / 1000),
-              parseFloat(data.o),
-              parseFloat(data.h),
-              parseFloat(data.l),
-              parseFloat(data.c),
-              parseFloat(data.v)
+          const updatedSymol = instrument_name.replace('_', '');
+          await me.candleImporter.insertThrottledCandles(
+            data.map(
+              c =>
+                new ExchangeCandlestick(
+                  me.getName(),
+                  updatedSymol,
+                  interval,
+                  Math.round(c.t / 1000),
+                  parseFloat(c.o),
+                  parseFloat(c.h),
+                  parseFloat(c.l),
+                  parseFloat(c.c),
+                  parseFloat(c.v)
+                )
             )
-          ]);
+          );
         }
       }
     };
