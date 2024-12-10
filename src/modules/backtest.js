@@ -22,7 +22,7 @@ module.exports = class Backtest {
 
         return {
           name: `${symbol.exchange}.${symbol.symbol}`,
-          options: periods.length > 0 ? periods : ['15m', '1m', '5m', '1h', '4h']
+          options: periods.length > 0 ? periods : ['30m', '15m', '1m', '5m', '1h', '4h']
         };
       };
     });
@@ -63,13 +63,7 @@ module.exports = class Backtest {
         fetchCombinedCandles: async (mainExchange, symbol, period, exchanges = []) => {
           const key = mainExchange + symbol + period;
           if (!periodCache[key]) {
-            periodCache[key] = await this.exchangeCandleCombine.fetchCombinedCandlesSince(
-              mainExchange,
-              symbol,
-              period,
-              exchanges,
-              prefillWindow
-            );
+            periodCache[key] = await this.exchangeCandleCombine.fetchCombinedCandlesSince(mainExchange, symbol, period, exchanges, prefillWindow);
           }
 
           const filter = {};
@@ -97,14 +91,7 @@ module.exports = class Backtest {
       while (current < end) {
         const strategyManager = new StrategyManager({}, mockedRepository, {}, this.projectDir);
 
-        const item = await strategyManager.executeStrategyBacktest(
-          strategy,
-          exchange,
-          pair,
-          options,
-          lastSignal.signal,
-          lastSignal.price
-        );
+        const item = await strategyManager.executeStrategyBacktest(strategy, exchange, pair, options, lastSignal.signal, lastSignal.price);
         item.time = current;
 
         // so change in signal
@@ -237,7 +224,7 @@ module.exports = class Backtest {
           // Entry Position Details
           const entrySignalType = lastPosition.result._signal; // Long or Short
           const entryPrice = lastPosition.price; // Price during the trade entry
-          const tradedQuantity = Number((workingCapital / entryPrice)); // Quantity
+          const tradedQuantity = Number(workingCapital / entryPrice); // Quantity
 
           // Exit Details
           const exitPrice = signalObject.price; // Price during trade exit

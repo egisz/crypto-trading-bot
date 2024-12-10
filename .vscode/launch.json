@@ -10,7 +10,7 @@
       "name": "Debug Backfill",
       "skipFiles": ["<node_internals>/**"],
       "program": "${workspaceFolder}/index.js",
-      "args": ["backfill", "-e", "cryptocom", "-p", "30m", "-s", "SOL_USDT"]
+      "args": ["backfill", "-e", "cryptocom", "-p", "30m", "-s", "SOLUSDT", "-d", "14"]
     },
     {
       "type": "node",

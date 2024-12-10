@@ -1,4 +1,6 @@
 // https://docs.ccxt.com/#/exchanges/cryptocom
+// https://github.com/ccxt/ccxt/blob/master/js/src/cryptocom.js#L2894
+// https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html#user-positions
 
 const crypto = require('crypto-js');
 const WebSocket = require('ws');
@@ -17,6 +19,7 @@ const Position = require('../dict/position');
 const CcxtExchangeOrder = require('./ccxt/ccxt_exchange_order');
 const CommonUtil = require('../utils/common_util');
 const TradesUtil = require('./utils/trades_util');
+const ExchangeOrder = require('../dict/exchange_order');
 
 module.exports = class CryptoComExchange {
   constructor(eventEmitter, requestClient, candlestickResample, logger, queue, candleImporter, throttler) {
@@ -39,7 +42,7 @@ module.exports = class CryptoComExchange {
   }
 
   backfill(symbol, period, start) {
-    const symbolUpdated = symbol.replace('PERP', '');
+    const symbolUpdated = symbol.replace('USDT', '_USDT');
 
     return new Promise((resolve, reject) => {
       const query = querystring.stringify({
@@ -54,13 +57,6 @@ module.exports = class CryptoComExchange {
       request(`${this.getBaseUrl()}public/get-candlestick?${query}`, { json: true }, (err, res, body) => {
         if (err) {
           console.log(`CryptoCom: Candle backfill error: ${String(err)}`);
-          reject();
-          return;
-        }
-
-        if (res.statusCode === 429) {
-          console.log(`CryptoCom: Limit reached: ${String(res.headers)}`);
-          // TODO delay next execution
           reject();
           return;
         }
@@ -107,18 +103,18 @@ module.exports = class CryptoComExchange {
       //   });
       // }, 1000 * 30);
 
-      setInterval(async () => {
-        me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
-      }, 1000 * 36);
+      // setInterval(async () => {
+      //   me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
+      // }, 1000 * 36);
 
-      setTimeout(async () => {
-        await ccxtClient.fetchMarkets();
-        //TODO: uncomment after testing
-        // me.throttler.addTask('cryptocom_sync_orders', async () => {
-        //   await me.ccxtExchangeOrder.syncOrders();
-        // });
-        me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
-      }, 1000);
+      // setTimeout(async () => {
+      //   await ccxtClient.fetchMarkets();
+      //   //TODO: uncomment after testing
+      //   // me.throttler.addTask('cryptocom_sync_orders', async () => {
+      //   //   await me.ccxtExchangeOrder.syncOrders();
+      //   // });
+      //   me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me));
+      // }, 1000);
 
       setTimeout(async () => {
         await me.initUserWebsocket(config);
@@ -219,61 +215,62 @@ module.exports = class CryptoComExchange {
 
     if (!this.balances?.free) return positions;
 
-    for (const asset of Object.keys(this.balances.free)) {
-      const available = this.balances.free[asset];
+    // for (const asset of Object.keys(this.balances.free)) {
+    //   const available = this.balances.free[asset];
 
-      const assetPositions = [];
+    const assetPositions = [];
 
-      for (const pair in capitals) {
-        // just a hack to get matching pairs with capital eg: "BTCUSDT" needs a capital of "BTC"
-        if (!pair.startsWith(asset)) {
-          continue;
-        }
+    for (const pair in capitals) {
+      // just a hack to get matching pairs with capital eg: "BTCUSDT" needs a capital of "BTC"
+      // if (!pair.startsWith(asset)) {
+      //   continue;
+      // }
+      const asset = Object.keys(this.balances.free).find(b => pair.startsWith(b));
 
-        // 1% balance left indicate open position
-        const pairCapital = capitals[pair];
-        if (pairCapital == 0 || Math.abs(Math.abs(available) / pairCapital) < 0.1) {
-          continue;
-        }
-
-        let entry;
-        let createdAt;
-
-        if (this.trades && this.trades[pair] && this.trades[pair].length > 0) {
-          const positionEntry = TradesUtil.findPositionEntryFromTrades(this.trades[pair], Math.abs(available), side);
-
-          if (positionEntry) {
-            entry = positionEntry.average_price;
-            createdAt = positionEntry.time;
-          }
-        }
-
-        // try to find a entry price, based on trade history
-        const side = available < 0 ? 'short' : 'long';
-
-        // calculate profit based on the ticker price
-        let profit;
-        if (entry && this.tickers[pair]) {
-          profit = (this.tickers[pair].bid / entry - 1) * 100;
-
-          // inverse profit for short
-          if (side === 'short') {
-            profit *= -1;
-          }
-        }
-
-        assetPositions.push(Position.create(pair, available, new Date(), createdAt, entry, profit));
+      const available = this.balances.free[asset] || this.positions[pair]?.amount || 0;
+      // 1% balance left indicate open position
+      const pairCapital = capitals[pair];
+      if (pairCapital == 0 || Math.abs(Math.abs(available) / pairCapital) < 0.1) {
+        continue;
       }
 
-      if (assetPositions.length > 0) {
-        // on multiple pair path orders with latest date wins
-        const assetPositionsOrdered = assetPositions.sort(
-          // order by latest
-          (a, b) => (b.createdAt ? b.createdAt : new Date('1970-01-01')) - (a.createdAt ? a.createdAt : new Date('1970-01-01'))
-        );
+      let entry;
+      let createdAt;
 
-        positions.push(assetPositionsOrdered[0]);
+      if (this.trades && this.trades[pair] && this.trades[pair].length > 0) {
+        const positionEntry = TradesUtil.findPositionEntryFromTrades(this.trades[pair], Math.abs(available), side);
+
+        if (positionEntry) {
+          entry = positionEntry.average_price;
+          createdAt = positionEntry.time;
+        }
       }
+
+      // try to find a entry price, based on trade history
+      const side = available < 0 ? 'short' : 'long';
+
+      // calculate profit based on the ticker price
+      let profit;
+      if (entry && this.tickers[pair]) {
+        profit = (this.tickers[pair].bid / entry - 1) * 100;
+
+        // inverse profit for short
+        if (side === 'short') {
+          profit *= -1;
+        }
+      }
+
+      assetPositions.push(Position.create(pair, available, new Date(), createdAt, entry, profit));
+    }
+
+    if (assetPositions.length > 0) {
+      // on multiple pair path orders with latest date wins
+      const assetPositionsOrdered = assetPositions.sort(
+        // order by latest
+        (a, b) => (b.createdAt ? b.createdAt : new Date('1970-01-01')) - (a.createdAt ? a.createdAt : new Date('1970-01-01'))
+      );
+
+      positions.push(assetPositionsOrdered[0]);
     }
 
     return positions;
@@ -298,7 +295,8 @@ module.exports = class CryptoComExchange {
   }
 
   async order(order) {
-    return this.ccxtExchangeOrder.createOrder(order);
+    await this.ccxtExchangeOrder.createOrder(order);
+    return order;
   }
 
   async cancelOrder(id) {
@@ -360,72 +358,73 @@ module.exports = class CryptoComExchange {
    * @param position
    * @returns {*}
    */
-  static createPositionFromWebsocket(position) {
-    const positionAmt = parseFloat(position.pa);
-    const entryPrice = parseFloat(position.ep);
+  // static createPositionFromWebsocket(position) {
+  //   const positionAmt = parseFloat(position.pa);
+  //   const entryPrice = parseFloat(position.ep);
 
-    return new Position(position.s, positionAmt < 0 ? 'short' : 'long', positionAmt, undefined, new Date(), entryPrice, undefined, position);
-  }
+  //   return new Position(position.s, positionAmt < 0 ? 'short' : 'long', positionAmt, undefined, new Date(), entryPrice, undefined, position);
+  // }
 
   /**
    * Websocket position updates
    */
-  accountUpdate(message) {
-    if (message.a && message.a.P) {
-      message.a.P.forEach(position => {
-        if (!position.s || !position.ps || position.ps.toLowerCase() !== 'both') {
-          return;
-        }
+  // accountUpdate(message) {
+  //   if (message.a && message.a.P) {
+  //     message.a.P.forEach(position => {
+  //       if (!position.s || !position.ps || position.ps.toLowerCase() !== 'both') {
+  //         return;
+  //       }
 
-        // position closed
-        if (position.s in this.positions && position.pa === '0') {
-          delete this.positions[position.s];
+  //       // position closed
+  //       if (position.s in this.positions && position.pa === '0') {
+  //         delete this.positions[position.s];
 
-          this.logger.info(`${this.getName()}: Websocket position closed/removed: ${JSON.stringify([position.s, position])}`);
+  //         this.logger.info(`${this.getName()}: Websocket position closed/removed: ${JSON.stringify([position.s, position])}`);
 
-          return;
-        }
+  //         return;
+  //       }
 
-        // position open
-        if (
-          !(position.s in this.positions) &&
-          position.pa !== '0' &&
-          (parseFloat(position.ep) > 0.00001 || parseFloat(position.ep) < -0.00001) // prevent float point issues
-        ) {
-          this.positions[position.s] = CryptoComExchange.createPositionFromWebsocket(position);
+  //       // position open
+  //       if (
+  //         !(position.s in this.positions) &&
+  //         position.pa !== '0' &&
+  //         (parseFloat(position.ep) > 0.00001 || parseFloat(position.ep) < -0.00001) // prevent float point issues
+  //       ) {
+  //         this.positions[position.s] = CryptoComExchange.createPositionFromWebsocket(position);
 
-          this.logger.info(`${this.getName()}: Websocket position new found: ${JSON.stringify([position.s, position])}`);
+  //         this.logger.info(`${this.getName()}: Websocket position new found: ${JSON.stringify([position.s, position])}`);
 
-          return;
-        }
+  //         return;
+  //       }
 
-        // position update
-        if (position.s in this.positions) {
-          this.logger.info(
-            `${this.getName()}: Websocket position update: ${JSON.stringify([position.s, position.pa, this.positions[position.s].getAmount()])}`
-          );
-        }
-      }, this);
-    }
-  }
+  //       // position update
+  //       if (position.s in this.positions) {
+  //         this.logger.info(
+  //           `${this.getName()}: Websocket position update: ${JSON.stringify([position.s, position.pa, this.positions[position.s].getAmount()])}`
+  //         );
+  //       }
+  //     }, this);
+  //   }
+  // }
 
   /**
    * As a websocket fallback update orders also on REST
    */
-  async syncPositionViaRestApi() {
-    let response;
-    try {
-      response = await this.ccxtClient.fetchPositions();
-    } catch (e) {
-      this.logger.error(`${this.getName()}: error getting positions:${e}`);
-      return;
-    }
+  // TODO: Remove after testing
+  // async syncPositionViaRestApi() {
+  //   let response;
+  //   try {
+  //     response = await this.ccxtClient.fetchPositions();
+  //   } catch (e) {
+  //     this.logger.error(`${this.getName()}: error getting positions:${e}`);
+  //     return;
+  //   }
 
-    const positions = response.filter(position => position.entryPrice && parseFloat(position.entryPrice) > 0);
-    this.fullPositionsUpdate(CryptoComExchange.createPositions(positions));
+  //   const positions = response.filter(position => position.entryPrice && parseFloat(position.entryPrice) > 0);
+  //   this.fullPositionsUpdate(CryptoComExchange.createPositions(positions));
 
-    this.logger.debug(`${this.getName()}: positions updates: ${positions.length}`);
-  }
+  //   this.logger.debug(`${this.getName()}: positions updates: ${positions.length}`);
+  // }
 
   // eslint-disable-next-line no-unused-vars
   isInverseSymbol(symbol) {
@@ -592,7 +591,7 @@ module.exports = class CryptoComExchange {
 
       setTimeout(async () => {
         me.logger.info(`${me.getName()}: Public stream (${indexConnection}) connection reconnect`);
-        await me.initPublicWebsocketChunk(subscriptions, indexConnection);
+        me.initPublicWebsocketChunk(subscriptions, indexConnection);
       }, 1000 * 30);
     };
   }
@@ -608,7 +607,7 @@ module.exports = class CryptoComExchange {
     exchangeWS.ws.onmessage = async function (event) {
       if (event && event.type === 'message') {
         const message = JSON.parse(event.data);
-        console.log(message);
+        // console.log(message);
 
         const { method, id, code, result } = message;
         if (method?.toLowerCase() === 'public/heartbeat') {
@@ -619,42 +618,51 @@ module.exports = class CryptoComExchange {
             me.logger.info(`${me.getName()}: Authenticated`);
             exchangeWS.subscribe(['user.order', 'user.positions', 'user.balance']);
           }
-        } else if (method?.toLowerCase() === 'subscribe') {
-          if (code == 0 && result?.channel === 'user.order' && result?.data?.length) {
-            me.logger.info(`${me.getName()}: User orders update: ${JSON.stringify(result.data)}`);
+        } else if (method?.toLowerCase() === 'subscribe' && code == 0 && result?.data?.length) {
+          if (result?.channel === 'user.order') {
+            me.logger.info(`${me.getName()}: User orders update: ${result.data.length}`);
             result.data.forEach(order => {
-              // const order = me.ccxtClient.parseOrder(msgOrder);
-              // const order = CryptoComExchange.createRestOrderFromWebsocket(msgOrder);
-              me.ccxtExchangeOrder.triggerPlainOrder(order);
               me.logger.info(`${me.getName()}: User order update: ${JSON.stringify(order)}`);
+              me.ccxtExchangeOrder.triggerPlainOrder(order);
             });
-          } else if (code == 0 && result?.channel === 'user.balance' && result?.data?.length) {
+          } else if (result?.channel === 'user.balance') {
+            // https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html#user-balance
             // console.log(`${me.getName()}: User balance update: ${result.data}`);
             me.balances = me.ccxtClient.parseBalance(message);
-            // me.logger.info(`${me.getName()}: User balance update: ${JSON.stringify(me.balances)}`);
+          } else if (result?.channel === 'user.positions') {
+            // https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html#user-positions
+            me.logger.info(`${me.getName()}: User positions update: ${JSON.stringify(result.data)}`);
+            // https://github.com/ccxt/ccxt/blob/master/js/src/cryptocom.js#L2894
+            result.data.forEach(position => {
+              me.positions[position.instrument_name] = new Position(
+                position.instrument_name,
+                position.quantity < 0 ? 'short' : 'long',
+                position.quantity,
+                position.open_position_pnl,
+                new Date(),
+                position.cost,
+                undefined,
+                position
+              );
+            });
+            // const responseResult = me.ccxtClient.safeDict(message, 'result', {});
+            // const positions = me.ccxtClient.safeList(responseResult, 'data', []);
+            // const result = [];
+            // for (let i = 0; i < positions.length; i++) {
+            //   const entry = positions[i];
+            //   const marketId = me.ccxtClient.safeString(entry, 'instrument_name');
+            //   const marketInner = me.ccxtClient.safeMarket(marketId, undefined, undefined, 'contract');
+            //   result.push(me.ccxtClient.parsePosition(entry, marketInner));
+            //   new Position(position.s, positionAmt < 0 ? 'short' : 'long', positionAmt, undefined, new Date(), entryPrice, undefined, position);
+            // }
+            // me.positions = result;
           }
-        }
-
-        if (message.e && message.e.toUpperCase() === 'ACCOUNT_UPDATE') {
-          me.accountUpdate(message);
-
-          me.throttler.addTask('cryptocom_sync_positions', me.syncPositionViaRestApi.bind(me), 3000);
         }
       }
     };
 
-    const heartbeat = setInterval(async () => {
-      try {
-        await this.ccxtClient.fapiPrivatePutListenKey();
-        this.logger.debug(`${this.getName()}: user stream ping successfully done`);
-      } catch (e) {
-        this.logger.error(`${this.getName()}: user stream ping error: ${String(e)}`);
-      }
-    }, 1000 * 60 * 10);
-
     exchangeWS.ws.onclose = function (event) {
       me.logger.error(`${me.getName()}: User stream connection closed: ${JSON.stringify([event.code, event.message])}`);
-      clearInterval(heartbeat);
 
       setTimeout(async () => {
         me.logger.info(`${me.getName()}: User stream connection reconnect`);
@@ -666,11 +674,54 @@ module.exports = class CryptoComExchange {
   }
 
   static createCustomCcxtOrderInstance(ccxtClient, symbols, logger) {
-    // ccxt id and binance ids are not matching
+    // ccxt id and cryptocom ids are not matching ???
     const CcxtExchangeOrderExtends = class extends CcxtExchangeOrder {
       async createOrder(order) {
         order.symbol = order.symbol.replace('USDT', '/USDT');
-        return super.createOrder(order);
+        const side = order.isShort() ? 'sell' : 'buy';
+
+        let parameters = {};
+
+        let promise;
+        switch (order.getType()) {
+          case Order.TYPE_STOP:
+          case Order.TYPE_LIMIT:
+            promise = this.ccxtClient.createOrder(order.getSymbol(), order.getType(), side, order.getAmount(), order.getPrice(), parameters.args || undefined);
+            break;
+          case Order.TYPE_MARKET:
+            promise = this.ccxtClient.createOrder(order.getSymbol(), order.getType(), side, order.getAmount());
+            break;
+          default:
+            throw `Ccxt order converter unsupported order type:${order.getType()}`;
+        }
+
+        let placedOrder;
+        try {
+          placedOrder = await promise;
+        } catch (e) {
+          if (e instanceof ccxt.NetworkError) {
+            return undefined;
+          }
+
+          throw e;
+        }
+
+        const exchangeOrder = new ExchangeOrder(
+          placedOrder.id,
+          order.getSymbol(),
+          'active',
+          order.getPrice(),
+          order.getAmount(),
+          1,
+          placedOrder.clientOrderId,
+          side,
+          order.getType(),
+          new Date(),
+          new Date(),
+          order
+        );
+        this.triggerPlainOrder(exchangeOrder);
+        return exchangeOrder;
       }
     };
 
@@ -685,22 +736,22 @@ module.exports = class CryptoComExchange {
         if (['trailing_stop_market', 'stop_market'].includes(order.type) && order.info.stopPrice) {
           order.price = parseFloat(order.info.stopPrice);
         }
-      },
-      createOrder: order => {
-        const request = {
-          args: {}
-        };
-
-        if (order.isReduceOnly()) {
-          request.args.reduceOnly = true;
-        }
-
-        if (order.getType() === Order.TYPE_STOP) {
-          request.args.stopPrice = order.getPrice();
-        }
-
-        return request;
       }
+      // createOrder: order => {
+      //   const request = {
+      //     args: {}
+      //   };
+
+      //   if (order.isReduceOnly()) {
+      //     request.args.reduceOnly = true;
+      //   }
+
+      //   if (order.getType() === Order.TYPE_STOP) {
+      //     request.args.stopPrice = order.getPrice();
+      //   }
+
+      //   return request;
+      // }
     });
   }
 
